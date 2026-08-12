@@ -2,24 +2,31 @@
 
 namespace SpaceGame.Config;
 
+public struct WindowSize(int width, int height)
+{
+    public int Width = width;
+    public int Height = height;
+};
+
 public class GameSettings
 {
-    public int ScreenWidth { get; private set; } = 800;
-    public int ScreenHeight { get; private set; } = 600;
-    public bool Fullscreen { get; private set; } = false;
-    public string LanguageCode { get; private set; } = "en";
+    public WindowSize WindowSize { get; set; } = new(800, 600);
+    public bool Fullscreen { get; set; } = false;
+    public string LanguageCode { get; set; } = "en";
     public bool DebugMode { get; private set; } = false;
+
+    public GameSettings() { }
 
     public GameSettings(string filePath)
     {
         Save(filePath);
     }
 
-    public static GameSettings? Load(string filePath)
+    public static GameSettings Load(string filePath)
     {
         var settingsText = File.ReadAllText(filePath);
         var result = JsonSerializer.Deserialize<GameSettings>(settingsText);
-        return result;
+        return result!;
     }
 
     public void Save(string filePath)
