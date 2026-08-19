@@ -39,7 +39,7 @@ public class SpaceGame
             _log.Information("Debug mode is ON");
 
         SpWindow = CreateWindow(Settings.WindowSize);
-        Renderer = new Renderer(Settings.DebugMode);
+        Renderer = new Renderer(Settings.DebugMode, SpWindow);
 
         Loop();
         Exit();

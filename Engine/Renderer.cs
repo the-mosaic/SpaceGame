@@ -2,6 +2,8 @@
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
+using Silk.NET.Vulkan.Extensions.KHR;
+using Silk.NET.Windowing;
 using System.Runtime.InteropServices;
 
 namespace SpaceGame.Engine;
@@ -9,10 +11,11 @@ namespace SpaceGame.Engine;
 struct QueueFamilyIndicies
 {
     public uint? GraphicsFamily { get; set; }
+    public uint? PresentFamily { get; set; }
 
-    public bool IsComplete()
+    public readonly bool IsComplete()
     {
-        return GraphicsFamily.HasValue;
+        return GraphicsFamily.HasValue && PresentFamily.HasValue;
     }
 }
 
@@ -22,13 +25,22 @@ public unsafe class Renderer
     public Vk vk { get; private set; }
     public Instance Instance { get; private set; }
     private readonly RenderDebug _debugMgr;
+
+    // device
     private PhysicalDevice _physicalDevice;
     private PhysicalDeviceProperties _physicalDeviceProperties;
+    private QueueFamilyIndicies _queueFamilyIndicies;
+    private Device _device;
+    private KhrSurface _khrSurfaceExt;
+    private SurfaceKHR _surface;
+
+    // queues
+    private Queue _graphicsQueue;
 
     private readonly ILogger _log;
     private bool _wantValidationLayers;
 
-    public Renderer(bool wantValidationLayers)
+    public Renderer(bool wantValidationLayers, IWindow window)
     {
         _wantValidationLayers = wantValidationLayers;
 
@@ -49,11 +61,19 @@ public unsafe class Renderer
         // instance to be created for it to work.
         if (_wantValidationLayers) _debugMgr.SetupDebugger();
 
+        // Set up our surface extension...
+        if (!vk.TryGetInstanceExtension(Instance, out _khrSurfaceExt))
+            throw new Exception("KHR_surface extension not found, can't render anything");
+        
+        _surface = window.VkSurface!.Create<AllocationCallbacks>(Instance.ToHandle(), null).ToSurface();
+
         // Find a physical device. If none that support the features we need is
         // found, this function throws an exception.
         _physicalDevice = FindPhysicalDevice();
+        _queueFamilyIndicies = GetQueueFamilyIndicies(_physicalDevice);
         vk.GetPhysicalDeviceProperties(_physicalDevice, out _physicalDeviceProperties);
 
+        // Logging for debug stuff
         if (_wantValidationLayers)
         {
             fixed(byte* deviceName = _physicalDeviceProperties.DeviceName)
@@ -65,7 +85,10 @@ public unsafe class Renderer
                 );
             }
         }
-            
+
+        // Now make our logical device.
+        _device = CreateLogicalDevice();
+        vk.GetDeviceQueue(_device, _queueFamilyIndicies.GraphicsFamily!.Value, 0, out _graphicsQueue);
     }
 
     // INITIALIZATION FUNCTIONS
@@ -147,16 +170,16 @@ public unsafe class Renderer
         throw new Exception("No supported physical device found!");
     }
 
-    private QueueFamilyIndicies GetQueueFamilyIndicies(PhysicalDevice device)
+    private QueueFamilyIndicies GetQueueFamilyIndicies(PhysicalDevice physDevice)
     {
         var indicies = new QueueFamilyIndicies();
         var queueFamilyCount = 0u;
 
-        vk.GetPhysicalDeviceQueueFamilyProperties(device, ref queueFamilyCount, null);
+        vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, null);
 
         var families = new QueueFamilyProperties[queueFamilyCount];
         fixed (QueueFamilyProperties* familiesPointer = families)
-            vk.GetPhysicalDeviceQueueFamilyProperties(device, ref queueFamilyCount, familiesPointer);
+            vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, familiesPointer);
 
         for (var i = 0u; i < families.Length; i++)
         {
@@ -165,11 +188,50 @@ public unsafe class Renderer
             if (family.QueueFlags.HasFlag(QueueFlags.GraphicsBit))
                 indicies.GraphicsFamily = i;
             
-            if (indicies.IsComplete())
-                break;
+            _khrSurfaceExt.GetPhysicalDeviceSurfaceSupport(physDevice, i, _surface, out var presentSupport);
+            if (presentSupport)
+                indicies.PresentFamily = i;
+
+            if (indicies.IsComplete()) break;
         }
 
         return indicies;
+    }
+
+    private Device CreateLogicalDevice()
+    {
+        var indicies = GetQueueFamilyIndicies(_physicalDevice);
+        var queuePriority = 1.0f;
+
+        var queueCreateInfo = new DeviceQueueCreateInfo()
+        {
+            SType = StructureType.DeviceQueueCreateInfo,
+            QueueFamilyIndex = indicies.GraphicsFamily!.Value,
+            QueueCount = 1,
+            PQueuePriorities = &queuePriority
+        };
+
+        var deviceFeatures = new PhysicalDeviceFeatures();
+        var deviceCreateInfo = new DeviceCreateInfo()
+        {
+            SType = StructureType.DeviceCreateInfo,
+            QueueCreateInfoCount = 1,
+            PQueueCreateInfos = &queueCreateInfo,
+            PEnabledFeatures = &deviceFeatures,
+            EnabledExtensionCount = 0,
+            EnabledLayerCount = 0
+        };
+
+        if (_wantValidationLayers)
+            _debugMgr.AddValidationLayers(ref deviceCreateInfo);
+
+        if (vk.CreateDevice(_physicalDevice, in deviceCreateInfo, null, out var device) != Result.Success)
+            throw new Exception("Logical device creation failed!");
+
+        if (_wantValidationLayers)
+            SilkMarshal.Free((nint)deviceCreateInfo.PpEnabledLayerNames);
+        
+        return device;
     }
 
     // RENDERING FUNCTIONS
@@ -177,7 +239,10 @@ public unsafe class Renderer
     // CLEANUP FUNCTIONS
     public void Destroy()
     {
+        vk.DestroyDevice(_device, null);
         _debugMgr.Destroy();
+
+        _khrSurfaceExt.DestroySurface(Instance, _surface, null);
         vk.DestroyInstance(Instance, null);
         vk.Dispose();
     }

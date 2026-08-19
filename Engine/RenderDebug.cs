@@ -16,7 +16,7 @@ public unsafe class RenderDebug(Renderer renderer)
 {
     public static readonly string[] ValidationLayers = ["VK_LAYER_KHRONOS_validation"];
 
-    private ExtDebugUtils? _debugUtils;
+    private ExtDebugUtils? _debugUtilsExt;
     private DebugUtilsMessengerEXT _debugMessenger;
 
     private readonly ILogger _log = SpaceGame.Logger!.ForContext<RenderDebug>();
@@ -41,11 +41,11 @@ public unsafe class RenderDebug(Renderer renderer)
 
     public void SetupDebugger()
     {
-        if (!_renderer.vk.TryGetInstanceExtension(_renderer.Instance, out _debugUtils)) return;
+        if (!_renderer.vk.TryGetInstanceExtension(_renderer.Instance, out _debugUtilsExt)) return;
 
         var debugCreateInfo = GetDebugCreateInfo();
 
-        if (_debugUtils!.CreateDebugUtilsMessenger(_renderer.Instance, &debugCreateInfo, null, out var debugMessenger) != Result.Success)
+        if (_debugUtilsExt!.CreateDebugUtilsMessenger(_renderer.Instance, &debugCreateInfo, null, out var debugMessenger) != Result.Success)
             throw new Exception("Debug messenger creation failed!");
 
         _debugMessenger = debugMessenger;
@@ -53,13 +53,19 @@ public unsafe class RenderDebug(Renderer renderer)
 
     // The create info here needs to be a pointer so that it's lifetime
     // doesn't run out before we run vkCreateInstance()
-    public void AddValidationLayers(ref InstanceCreateInfo info, DebugUtilsMessengerCreateInfoEXT* debugCreateInfo)
+    public void AddValidationLayers(ref InstanceCreateInfo instanceInfo, DebugUtilsMessengerCreateInfoEXT* debugCreateInfo)
     {
-        info.EnabledLayerCount = (uint)ValidationLayers.Length;
-        info.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr(ValidationLayers);
+        instanceInfo.EnabledLayerCount = (uint)ValidationLayers.Length;
+        instanceInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr(ValidationLayers);
 
         *debugCreateInfo = GetDebugCreateInfo();
-        info.PNext = debugCreateInfo;
+        instanceInfo.PNext = debugCreateInfo;
+    }
+
+    public void AddValidationLayers(ref DeviceCreateInfo deviceInfo)
+    {
+        deviceInfo.EnabledLayerCount = (uint)ValidationLayers.Length;
+        deviceInfo.PpEnabledLayerNames = (byte**)SilkMarshal.StringArrayToPtr(ValidationLayers);  
     }
 
     private DebugUtilsMessengerCreateInfoEXT GetDebugCreateInfo()
@@ -81,6 +87,6 @@ public unsafe class RenderDebug(Renderer renderer)
 
     public void Destroy()
     {
-        _debugUtils?.DestroyDebugUtilsMessenger(_renderer.Instance, _debugMessenger, null);
+        _debugUtilsExt?.DestroyDebugUtilsMessenger(_renderer.Instance, _debugMessenger, null);
     }
 }
