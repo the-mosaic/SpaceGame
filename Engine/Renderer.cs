@@ -31,11 +31,12 @@ public unsafe class Renderer
     private PhysicalDeviceProperties _physicalDeviceProperties;
     private QueueFamilyIndicies _queueFamilyIndicies;
     private Device _device;
-    private KhrSurface _khrSurfaceExt;
+    private readonly KhrSurface _khrSurfaceExt;
     private SurfaceKHR _surface;
 
     // queues
     private Queue _graphicsQueue;
+    private Queue _presentQueue;
 
     private readonly ILogger _log;
     private bool _wantValidationLayers;
@@ -89,6 +90,7 @@ public unsafe class Renderer
         // Now make our logical device.
         _device = CreateLogicalDevice();
         vk.GetDeviceQueue(_device, _queueFamilyIndicies.GraphicsFamily!.Value, 0, out _graphicsQueue);
+        vk.GetDeviceQueue(_device, _queueFamilyIndicies.PresentFamily!.Value, 0, out _presentQueue);
     }
 
     // INITIALIZATION FUNCTIONS
