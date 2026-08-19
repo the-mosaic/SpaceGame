@@ -6,13 +6,27 @@ using System.Runtime.InteropServices;
 
 namespace SpaceGame.Engine;
 
+struct QueueFamilyIndicies
+{
+    public uint? GraphicsFamily { get; set; }
+
+    public bool IsComplete()
+    {
+        return GraphicsFamily.HasValue;
+    }
+}
+
 public unsafe class Renderer
 {
-    public readonly Vk vk;
-    public Instance instance;
+    // vulkan related variables
+    public Vk vk { get; private set; }
+    public Instance Instance { get; private set; }
+    private readonly RenderDebug _debugMgr;
+    private PhysicalDevice _physicalDevice;
+    private PhysicalDeviceProperties _physicalDeviceProperties;
+
     private readonly ILogger _log;
     private bool _wantValidationLayers;
-    private RenderDebug _debugMgr;
 
     public Renderer(bool wantValidationLayers)
     {
@@ -21,12 +35,37 @@ public unsafe class Renderer
         _log = SpaceGame.Logger!.ForContext<Renderer>();
         vk = Vk.GetApi();
 
-        // initialization
+        // Vulkan Initialization
+
+        // Create the debug manager.
+        // This has to be done BEFORE CreateInstance() because it depends on
+        // non-static methods of DebugManager
         _debugMgr = new RenderDebug(this);
-        instance = CreateInstance();
+
+        // Create the instance.
+        Instance = CreateInstance();
+
+        // Now actually set up our debug messsenger. This function needs an
+        // instance to be created for it to work.
+        if (_wantValidationLayers) _debugMgr.SetupDebugger();
+
+        // Find a physical device. If none that support the features we need is
+        // found, this function throws an exception.
+        _physicalDevice = FindPhysicalDevice();
+        vk.GetPhysicalDeviceProperties(_physicalDevice, out _physicalDeviceProperties);
 
         if (_wantValidationLayers)
-            _debugMgr.SetupDebugger();
+        {
+            fixed(byte* deviceName = _physicalDeviceProperties.DeviceName)
+            {
+                _log.Information(
+                    "Selected physical device {Name}, API Version {ApiVersion}",
+                    SilkMarshal.PtrToString((nint)deviceName),
+                    RenderUtil.VersionToString(_physicalDeviceProperties.ApiVersion)
+                );
+            }
+        }
+            
     }
 
     // INITIALIZATION FUNCTIONS
@@ -49,9 +88,6 @@ public unsafe class Renderer
             ApplicationVersion = SpaceGame.ApplicationVersion,
             PEngineName = (byte*)Marshal.StringToHGlobalAnsi("No Engine"),
             EngineVersion = SpaceGame.ApplicationVersion,
-
-            // Not sure if we actually need Vulkan 1.2 here. I'm just too
-            // scared to use anything earlier because learnvulkan uses 1.2 LOL
             ApiVersion = Vk.Version12
         };
 
@@ -68,10 +104,7 @@ public unsafe class Renderer
 
         DebugUtilsMessengerCreateInfoEXT debugCreateInfo = default;
         if (_wantValidationLayers)
-        {
-            // this function populates all the fields we need i hope
             _debugMgr.AddValidationLayers(ref instanceInfo, &debugCreateInfo);
-        }
 
         if (vk.CreateInstance(in instanceInfo, null, out var result) != Result.Success)
             throw new Exception("Vulkan creation failed");
@@ -83,10 +116,7 @@ public unsafe class Renderer
 
         if (_wantValidationLayers)
             SilkMarshal.Free((nint)instanceInfo.PpEnabledLayerNames);
-
-        // This doesn't directly set the value of _instance to avoid VS yelling
-        // at me for having a potential null variable. I need to set it
-        // directly in the constructor for it to shut up
+        
         return result;
     }
 
@@ -102,13 +132,53 @@ public unsafe class Renderer
         return extensions;
     }
 
+    private PhysicalDevice FindPhysicalDevice()
+    {
+        var devices = vk!.GetPhysicalDevices(Instance);
+
+        foreach (var device in devices)
+        {
+            var familyIndicies = GetQueueFamilyIndicies(device);
+
+            if (familyIndicies.IsComplete())
+                return device;
+        }
+
+        throw new Exception("No supported physical device found!");
+    }
+
+    private QueueFamilyIndicies GetQueueFamilyIndicies(PhysicalDevice device)
+    {
+        var indicies = new QueueFamilyIndicies();
+        var queueFamilyCount = 0u;
+
+        vk.GetPhysicalDeviceQueueFamilyProperties(device, ref queueFamilyCount, null);
+
+        var families = new QueueFamilyProperties[queueFamilyCount];
+        fixed (QueueFamilyProperties* familiesPointer = families)
+            vk.GetPhysicalDeviceQueueFamilyProperties(device, ref queueFamilyCount, familiesPointer);
+
+        for (var i = 0u; i < families.Length; i++)
+        {
+            var family = families[i];
+
+            if (family.QueueFlags.HasFlag(QueueFlags.GraphicsBit))
+                indicies.GraphicsFamily = i;
+            
+            if (indicies.IsComplete())
+                break;
+        }
+
+        return indicies;
+    }
+
     // RENDERING FUNCTIONS
 
     // CLEANUP FUNCTIONS
     public void Destroy()
     {
         _debugMgr.Destroy();
-        vk.DestroyInstance(instance, null);
+        vk.DestroyInstance(Instance, null);
         vk.Dispose();
     }
 }

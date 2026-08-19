@@ -41,18 +41,18 @@ public unsafe class RenderDebug(Renderer renderer)
 
     public void SetupDebugger()
     {
-        if (!_renderer.vk.TryGetInstanceExtension(_renderer.instance, out _debugUtils)) return;
+        if (!_renderer.vk.TryGetInstanceExtension(_renderer.Instance, out _debugUtils)) return;
 
         var debugCreateInfo = GetDebugCreateInfo();
 
-        if (_debugUtils!.CreateDebugUtilsMessenger(_renderer.instance, &debugCreateInfo, null, out var debugMessenger) != Result.Success)
+        if (_debugUtils!.CreateDebugUtilsMessenger(_renderer.Instance, &debugCreateInfo, null, out var debugMessenger) != Result.Success)
             throw new Exception("Debug messenger creation failed!");
 
         _debugMessenger = debugMessenger;
     }
 
-    // Takes some instance create info without validation layers enabled and
-    // sets up the neccessary properties to have validation layers.
+    // The create info here needs to be a pointer so that it's lifetime
+    // doesn't run out before we run vkCreateInstance()
     public void AddValidationLayers(ref InstanceCreateInfo info, DebugUtilsMessengerCreateInfoEXT* debugCreateInfo)
     {
         info.EnabledLayerCount = (uint)ValidationLayers.Length;
@@ -81,6 +81,6 @@ public unsafe class RenderDebug(Renderer renderer)
 
     public void Destroy()
     {
-        _debugUtils?.DestroyDebugUtilsMessenger(_renderer.instance, _debugMessenger, null);
+        _debugUtils?.DestroyDebugUtilsMessenger(_renderer.Instance, _debugMessenger, null);
     }
 }
