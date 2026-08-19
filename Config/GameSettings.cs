@@ -4,8 +4,8 @@ namespace SpaceGame.Config;
 
 public struct WindowSize(int width, int height)
 {
-    public int Width = width;
-    public int Height = height;
+    public int Width { get; set; } = width;
+    public int Height { get; set; } = height;
 };
 
 public class GameSettings
@@ -13,7 +13,7 @@ public class GameSettings
     public WindowSize WindowSize { get; set; } = new(800, 600);
     public bool Fullscreen { get; set; } = false;
     public string LanguageCode { get; set; } = "en";
-    public bool DebugMode { get; private set; } = false;
+    public bool DebugMode { get; set; } = false;
 
     public GameSettings() { }
 
