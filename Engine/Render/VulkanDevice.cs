@@ -1,5 +1,7 @@
+using System.Runtime.InteropServices;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
+using Silk.NET.Vulkan.Extensions.KHR;
 
 namespace SpaceGame.Engine.Render;
 
@@ -14,9 +16,18 @@ struct QueueFamilyIndicies
     }
 }
 
+struct SwapchainSupportDetails
+{
+    public SurfaceCapabilitiesKHR Capabilities { get; set; }
+    public SurfaceFormatKHR[] Formats { get; set; }
+    public PresentModeKHR[] PresentModes { get; set; }
+}
+
 // wrapper class for physical and logical devices
 public unsafe class VulkanDevice
 {
+    public static readonly string[] DeviceExtensions = [KhrSwapchain.ExtensionName];
+
     public PhysicalDevice PhysicalDevice { get; private set; }
     public Device LogicalDevice { get; private set; }
     private PhysicalDeviceProperties _physicalDeviceProperties;
@@ -53,8 +64,16 @@ public unsafe class VulkanDevice
         foreach (var device in devices)
         {
             var familyIndicies = GetQueueFamilyIndicies(device);
+            var swapchainsSupported = false;
+            var extensionsSupported = DeviceSupportsExtensions(device);
 
-            if (familyIndicies.IsComplete())
+            if (extensionsSupported)
+            {
+                var swapchainDetails = GetSwapchainSupport(device);
+                swapchainsSupported = swapchainDetails.Formats.Any() && swapchainDetails.PresentModes.Any();
+            }
+
+            if (familyIndicies.IsComplete() && extensionsSupported && swapchainsSupported)
                 return device;
         }
 
@@ -89,10 +108,54 @@ public unsafe class VulkanDevice
         return indicies;
     }
 
+    private bool DeviceSupportsExtensions(PhysicalDevice physDevice)
+    {
+        var extensionCount = 0u;
+        _renderer.vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, null);
+
+        var availableExtensions = new ExtensionProperties[extensionCount];
+        fixed(ExtensionProperties* ptr = availableExtensions)
+            _renderer.vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, ptr);
+        
+        var availableExtensionNames = availableExtensions.Select(extension => Marshal.PtrToStringAnsi((nint)extension.ExtensionName));
+        return DeviceExtensions.All(availableExtensionNames.Contains);
+    }
+
+    private SwapchainSupportDetails GetSwapchainSupport(PhysicalDevice physDevice)
+    {
+        var SurfaceExt = _renderer.KhrSurfaceExt;
+
+        // Query our capabilities...
+        SurfaceExt.GetPhysicalDeviceSurfaceCapabilities(physDevice, _renderer.Surface, out var capabilities);
+        
+        // ...the formats that the device supports...
+        var formatCount = 0u;
+        SurfaceExt.GetPhysicalDeviceSurfaceFormats(physDevice, _renderer.Surface, ref formatCount, null);
+
+        var formats = new SurfaceFormatKHR[formatCount];
+        fixed (SurfaceFormatKHR* ptr = formats)
+            SurfaceExt.GetPhysicalDeviceSurfaceFormats(physDevice, _renderer.Surface, ref formatCount, ptr);
+
+        // ...and the present modes.
+        var presentModeCount = 0u;
+        SurfaceExt.GetPhysicalDeviceSurfacePresentModes(physDevice, _renderer.Surface, ref presentModeCount, null);
+        
+        var presentModes = new PresentModeKHR[presentModeCount];
+        fixed (PresentModeKHR* ptr = presentModes)
+            SurfaceExt.GetPhysicalDeviceSurfacePresentModes(physDevice, _renderer.Surface, ref presentModeCount, ptr);
+
+        return new SwapchainSupportDetails()
+        {
+            Capabilities = capabilities,
+            Formats = formats,
+            PresentModes = presentModes
+        };
+    }
+
     private Device CreateLogicalDevice()
     {
         var indicies = GetQueueFamilyIndicies(PhysicalDevice);
-        var queuePriority = 1.0f;
+        var queuePriority = 1f;
 
         var queueCreateInfo = new DeviceQueueCreateInfo()
         {
@@ -109,7 +172,8 @@ public unsafe class VulkanDevice
             QueueCreateInfoCount = 1,
             PQueueCreateInfos = &queueCreateInfo,
             PEnabledFeatures = &deviceFeatures,
-            EnabledExtensionCount = 0,
+            EnabledExtensionCount = (uint)DeviceExtensions.Length,
+            PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr(DeviceExtensions),
             EnabledLayerCount = 0
         };
 
