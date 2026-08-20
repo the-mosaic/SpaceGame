@@ -8,42 +8,23 @@ using System.Runtime.InteropServices;
 
 namespace SpaceGame.Engine;
 
-struct QueueFamilyIndicies
-{
-    public uint? GraphicsFamily { get; set; }
-    public uint? PresentFamily { get; set; }
-
-    public readonly bool IsComplete()
-    {
-        return GraphicsFamily.HasValue && PresentFamily.HasValue;
-    }
-}
-
 public unsafe class Renderer
 {
     // vulkan related variables
     public Vk vk { get; private set; }
     public Instance Instance { get; private set; }
-    private readonly RenderDebug _debugMgr;
-
-    // device
-    private PhysicalDevice _physicalDevice;
-    private PhysicalDeviceProperties _physicalDeviceProperties;
-    private QueueFamilyIndicies _queueFamilyIndicies;
-    private Device _device;
-    private readonly KhrSurface _khrSurfaceExt;
-    private SurfaceKHR _surface;
-
-    // queues
-    private Queue _graphicsQueue;
-    private Queue _presentQueue;
+    public RenderDebug Debug { get; private set; }
+    private VulkanDevice _device;
+    private KhrSurface _khrSurfaceExt;
+    public KhrSurface KhrSurfaceExt { get => _khrSurfaceExt; }
+    public SurfaceKHR Surface { get; private set; }
 
     private readonly ILogger _log;
-    private bool _wantValidationLayers;
+    public bool WantValidationLayers { get; private set; }
 
     public Renderer(bool wantValidationLayers, IWindow window)
     {
-        _wantValidationLayers = wantValidationLayers;
+        WantValidationLayers = wantValidationLayers;
 
         _log = SpaceGame.Logger!.ForContext<Renderer>();
         vk = Vk.GetApi();
@@ -53,54 +34,38 @@ public unsafe class Renderer
         // Create the debug manager.
         // This has to be done BEFORE CreateInstance() because it depends on
         // non-static methods of DebugManager
-        _debugMgr = new RenderDebug(this);
+        Debug = new RenderDebug(this);
 
         // Create the instance.
         Instance = CreateInstance();
 
         // Now actually set up our debug messsenger. This function needs an
         // instance to be created for it to work.
-        if (_wantValidationLayers) _debugMgr.SetupDebugger();
+        if (WantValidationLayers) Debug.SetupDebugger();
 
         // Set up our surface extension...
         if (!vk.TryGetInstanceExtension(Instance, out _khrSurfaceExt))
             throw new Exception("KHR_surface extension not found, can't render anything");
         
-        _surface = window.VkSurface!.Create<AllocationCallbacks>(Instance.ToHandle(), null).ToSurface();
+        Surface = window.VkSurface!.Create<AllocationCallbacks>(Instance.ToHandle(), null).ToSurface();
 
-        // Find a physical device. If none that support the features we need is
-        // found, this function throws an exception.
-        _physicalDevice = FindPhysicalDevice();
-        _queueFamilyIndicies = GetQueueFamilyIndicies(_physicalDevice);
-        vk.GetPhysicalDeviceProperties(_physicalDevice, out _physicalDeviceProperties);
+        // Create our device. This little wrapper class will handle everything
+        // for us just by using new().
+        _device = new(this);
 
         // Logging for debug stuff
-        if (_wantValidationLayers)
-        {
-            fixed(byte* deviceName = _physicalDeviceProperties.DeviceName)
-            {
-                _log.Information(
-                    "Selected physical device {Name}, API Version {ApiVersion}",
-                    SilkMarshal.PtrToString((nint)deviceName),
-                    RenderUtil.VersionToString(_physicalDeviceProperties.ApiVersion)
-                );
-            }
-        }
-
-        // Now make our logical device.
-        _device = CreateLogicalDevice();
-        vk.GetDeviceQueue(_device, _queueFamilyIndicies.GraphicsFamily!.Value, 0, out _graphicsQueue);
-        vk.GetDeviceQueue(_device, _queueFamilyIndicies.PresentFamily!.Value, 0, out _presentQueue);
+        if (WantValidationLayers)
+            _log.Information("Selected physical device {Name}, API Version {ApiVersion}", _device.DeviceName, _device.ApiVersionStr);
     }
 
     // INITIALIZATION FUNCTIONS
     private Instance CreateInstance()
     {
-        if (_wantValidationLayers && !_debugMgr.ValidationLayersSupported())
+        if (WantValidationLayers && !Debug.ValidationLayersSupported())
         {
             // Should we exit here or just do a warning?
             _log.Warning("Validation layers requested, but the system does not support the required layers. Continuing without validation.");
-            _wantValidationLayers = false;
+            WantValidationLayers = false;
         }
 
         // I really don't like having to use Marshal stuff here, but apparently
@@ -128,8 +93,8 @@ public unsafe class Renderer
         };
 
         DebugUtilsMessengerCreateInfoEXT debugCreateInfo = default;
-        if (_wantValidationLayers)
-            _debugMgr.AddValidationLayers(ref instanceInfo, &debugCreateInfo);
+        if (WantValidationLayers)
+            Debug.AddValidationLayers(ref instanceInfo, &debugCreateInfo);
 
         if (vk.CreateInstance(in instanceInfo, null, out var result) != Result.Success)
             throw new Exception("Vulkan creation failed");
@@ -139,7 +104,7 @@ public unsafe class Renderer
         Marshal.FreeHGlobal((nint)appInfo.PEngineName);
         SilkMarshal.Free((nint)instanceInfo.PpEnabledExtensionNames);
 
-        if (_wantValidationLayers)
+        if (WantValidationLayers)
             SilkMarshal.Free((nint)instanceInfo.PpEnabledLayerNames);
         
         return result;
@@ -151,89 +116,10 @@ public unsafe class Renderer
         var glfwExntensions = window.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
         var extensions = SilkMarshal.PtrToStringArray((IntPtr)glfwExntensions, (int)glfwExtensionCount);
 
-        if (_wantValidationLayers)
+        if (WantValidationLayers)
             extensions = [..extensions, ExtDebugUtils.ExtensionName];
 
         return extensions;
-    }
-
-    private PhysicalDevice FindPhysicalDevice()
-    {
-        var devices = vk!.GetPhysicalDevices(Instance);
-
-        foreach (var device in devices)
-        {
-            var familyIndicies = GetQueueFamilyIndicies(device);
-
-            if (familyIndicies.IsComplete())
-                return device;
-        }
-
-        throw new Exception("No supported physical device found!");
-    }
-
-    private QueueFamilyIndicies GetQueueFamilyIndicies(PhysicalDevice physDevice)
-    {
-        var indicies = new QueueFamilyIndicies();
-        var queueFamilyCount = 0u;
-
-        vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, null);
-
-        var families = new QueueFamilyProperties[queueFamilyCount];
-        fixed (QueueFamilyProperties* familiesPointer = families)
-            vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, familiesPointer);
-
-        for (var i = 0u; i < families.Length; i++)
-        {
-            var family = families[i];
-
-            if (family.QueueFlags.HasFlag(QueueFlags.GraphicsBit))
-                indicies.GraphicsFamily = i;
-            
-            _khrSurfaceExt.GetPhysicalDeviceSurfaceSupport(physDevice, i, _surface, out var presentSupport);
-            if (presentSupport)
-                indicies.PresentFamily = i;
-
-            if (indicies.IsComplete()) break;
-        }
-
-        return indicies;
-    }
-
-    private Device CreateLogicalDevice()
-    {
-        var indicies = GetQueueFamilyIndicies(_physicalDevice);
-        var queuePriority = 1.0f;
-
-        var queueCreateInfo = new DeviceQueueCreateInfo()
-        {
-            SType = StructureType.DeviceQueueCreateInfo,
-            QueueFamilyIndex = indicies.GraphicsFamily!.Value,
-            QueueCount = 1,
-            PQueuePriorities = &queuePriority
-        };
-
-        var deviceFeatures = new PhysicalDeviceFeatures();
-        var deviceCreateInfo = new DeviceCreateInfo()
-        {
-            SType = StructureType.DeviceCreateInfo,
-            QueueCreateInfoCount = 1,
-            PQueueCreateInfos = &queueCreateInfo,
-            PEnabledFeatures = &deviceFeatures,
-            EnabledExtensionCount = 0,
-            EnabledLayerCount = 0
-        };
-
-        if (_wantValidationLayers)
-            _debugMgr.AddValidationLayers(ref deviceCreateInfo);
-
-        if (vk.CreateDevice(_physicalDevice, in deviceCreateInfo, null, out var device) != Result.Success)
-            throw new Exception("Logical device creation failed!");
-
-        if (_wantValidationLayers)
-            SilkMarshal.Free((nint)deviceCreateInfo.PpEnabledLayerNames);
-        
-        return device;
     }
 
     // RENDERING FUNCTIONS
@@ -241,10 +127,10 @@ public unsafe class Renderer
     // CLEANUP FUNCTIONS
     public void Destroy()
     {
-        vk.DestroyDevice(_device, null);
-        _debugMgr.Destroy();
+        _device.Destroy();
+        Debug.Destroy();
 
-        _khrSurfaceExt.DestroySurface(Instance, _surface, null);
+        KhrSurfaceExt.DestroySurface(Instance, Surface, null);
         vk.DestroyInstance(Instance, null);
         vk.Dispose();
     }
