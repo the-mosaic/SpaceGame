@@ -1,7 +1,7 @@
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 
-namespace SpaceGame.Engine;
+namespace SpaceGame.Engine.Render;
 
 struct QueueFamilyIndicies
 {

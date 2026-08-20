@@ -1,4 +1,4 @@
-namespace SpaceGame.Engine;
+namespace SpaceGame.Engine.Render;
 
 public class RenderUtil
 {

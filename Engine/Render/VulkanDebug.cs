@@ -4,7 +4,7 @@ using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using System.Runtime.InteropServices;
 
-namespace SpaceGame.Engine;
+namespace SpaceGame.Engine.Render;
 
 // aliases to make my life a bit easier
 using MessageSeverity = DebugUtilsMessageSeverityFlagsEXT;
@@ -12,14 +12,14 @@ using MessageType = DebugUtilsMessageTypeFlagsEXT;
 using MessengerCallbackData = DebugUtilsMessengerCallbackDataEXT;
 using MessengerCallbackFn = DebugUtilsMessengerCallbackFunctionEXT;
 
-public unsafe class RenderDebug(Renderer renderer)
+public unsafe class VulkanDebug(Renderer renderer)
 {
     public static readonly string[] ValidationLayers = ["VK_LAYER_KHRONOS_validation"];
 
     private ExtDebugUtils? _debugUtilsExt;
     private DebugUtilsMessengerEXT _debugMessenger;
 
-    private readonly ILogger _log = SpaceGame.Logger!.ForContext<RenderDebug>();
+    private readonly ILogger _log = SpaceGame.Logger!.ForContext<VulkanDebug>();
     private readonly Renderer _renderer = renderer;
 
     public bool ValidationLayersSupported()

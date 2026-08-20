@@ -4,7 +4,7 @@ using Silk.NET.Core;
 using Silk.NET.Maths;
 using Silk.NET.Windowing;
 using SpaceGame.Config;
-using SpaceGame.Engine;
+using SpaceGame.Engine.Render;
 
 namespace SpaceGame;
 

@@ -6,14 +6,14 @@ using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System.Runtime.InteropServices;
 
-namespace SpaceGame.Engine;
+namespace SpaceGame.Engine.Render;
 
 public unsafe class Renderer
 {
     // vulkan related variables
     public Vk vk { get; private set; }
     public Instance Instance { get; private set; }
-    public RenderDebug Debug { get; private set; }
+    public VulkanDebug Debug { get; private set; }
     private VulkanDevice _device;
     private KhrSurface _khrSurfaceExt;
     public KhrSurface KhrSurfaceExt { get => _khrSurfaceExt; }
@@ -34,7 +34,7 @@ public unsafe class Renderer
         // Create the debug manager.
         // This has to be done BEFORE CreateInstance() because it depends on
         // non-static methods of DebugManager
-        Debug = new RenderDebug(this);
+        Debug = new VulkanDebug(this);
 
         // Create the instance.
         Instance = CreateInstance();
