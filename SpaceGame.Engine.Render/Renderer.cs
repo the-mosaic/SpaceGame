@@ -1,10 +1,7 @@
 ﻿using Serilog;
-using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
-using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
-using System.Runtime.InteropServices;
 
 namespace SpaceGame.Engine.Render;
 
@@ -22,8 +19,9 @@ public unsafe class Renderer
     
     private IWindow _window;
     private readonly ILogger _log;
-    public bool WantValidationLayers { get; private set; }
+    public bool WantValidationLayers { get; set; }
 
+    // INITIALIZATION FUNCTIONS
     public Renderer(bool wantValidationLayers, IWindow window)
     {
         _window = window;
@@ -40,7 +38,7 @@ public unsafe class Renderer
         Debug = new VulkanDebug(this);
 
         // Create the instance.
-        Instance = CreateInstance();
+        Instance = RendererInit.CreateInstance(this);
 
         // Now actually set up our debug messsenger. This function needs an
         // instance to be created for it to work.
@@ -61,71 +59,7 @@ public unsafe class Renderer
             _log.Information("Selected physical device {Name}, API Version {ApiVersion}", Device.DeviceName, Device.ApiVersionStr);
         
         // Now create the swapchain
-        _swapchain = new VulkanSwapchain(this, SpaceGame.Instance!.SpWindow);
-    }
-
-    // INITIALIZATION FUNCTIONS
-    private Instance CreateInstance()
-    {
-        if (WantValidationLayers && !Debug.ValidationLayersSupported())
-        {
-            // Should we exit here or just do a warning?
-            _log.Warning("Validation layers requested, but the system does not support the required layers. Continuing without validation.");
-            WantValidationLayers = false;
-        }
-
-        // I really don't like having to use Marshal stuff here, but apparently
-        // Silk.NET only supports using Spans for their OpenGL APIs(!!), so I'm
-        // stuck with this ugly code for now.
-        var appInfo = new ApplicationInfo()
-        {
-            SType = StructureType.ApplicationInfo,
-            PApplicationName = (byte*)Marshal.StringToHGlobalAnsi("Space game"),
-            ApplicationVersion = SpaceGame.ApplicationVersion,
-            PEngineName = (byte*)Marshal.StringToHGlobalAnsi("No Engine"),
-            EngineVersion = SpaceGame.ApplicationVersion,
-            ApiVersion = Vk.Version12
-        };
-
-        var extensions = GetRequiredExtensions();
-        var instanceInfo = new InstanceCreateInfo()
-        {
-            SType = StructureType.InstanceCreateInfo,
-            PApplicationInfo = &appInfo,
-            EnabledExtensionCount = (uint)extensions.Length,
-            PpEnabledExtensionNames = (byte**)SilkMarshal.StringArrayToPtr(extensions),
-            EnabledLayerCount = 0,
-            PNext = null
-        };
-
-        DebugUtilsMessengerCreateInfoEXT debugCreateInfo = default;
-        if (WantValidationLayers)
-            Debug.AddValidationLayers(ref instanceInfo, &debugCreateInfo);
-
-        if (vk.CreateInstance(in instanceInfo, null, out var result) != Result.Success)
-            throw new Exception("Vulkan creation failed");
-
-        // grumble grumble
-        Marshal.FreeHGlobal((nint)appInfo.PApplicationName);
-        Marshal.FreeHGlobal((nint)appInfo.PEngineName);
-        SilkMarshal.Free((nint)instanceInfo.PpEnabledExtensionNames);
-
-        if (WantValidationLayers)
-            SilkMarshal.Free((nint)instanceInfo.PpEnabledLayerNames);
-        
-        return result;
-    }
-
-    private string[] GetRequiredExtensions()
-    {
-        var window = SpaceGame.Instance!.SpWindow!;
-        var glfwExntensions = window.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
-        var extensions = SilkMarshal.PtrToStringArray((IntPtr)glfwExntensions, (int)glfwExtensionCount);
-
-        if (WantValidationLayers)
-            extensions = [..extensions, ExtDebugUtils.ExtensionName];
-
-        return extensions;
+        _swapchain = new VulkanSwapchain(this, window);
     }
 
     // RENDERING FUNCTIONS
