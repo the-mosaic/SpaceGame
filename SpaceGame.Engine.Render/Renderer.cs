@@ -20,7 +20,7 @@ public unsafe class Renderer
 
         Context = new VulkanContext
         {
-            vk = vk,
+            Vk = vk,
             Instance = RendererInit.CreateInstance(ref wantValidationLayers, vk),
             WantValidationLayers = wantValidationLayers
         };

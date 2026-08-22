@@ -51,17 +51,17 @@ public unsafe class VulkanDevice
         PhysicalDevice = FindPhysicalDevice();
         SwapchainSupport = GetSwapchainSupport(PhysicalDevice);
         _queueFamilyIndicies = GetQueueFamilyIndicies(PhysicalDevice);
-        _context.vk.GetPhysicalDeviceProperties(PhysicalDevice, out _physicalDeviceProperties);
+        _context.Vk.GetPhysicalDeviceProperties(PhysicalDevice, out _physicalDeviceProperties);
 
         // Now make our logical device.
         LogicalDevice = CreateLogicalDevice();
-        _context.vk.GetDeviceQueue(LogicalDevice, _queueFamilyIndicies.GraphicsFamily!.Value, 0, out _graphicsQueue);
-        _context.vk.GetDeviceQueue(LogicalDevice, _queueFamilyIndicies.PresentFamily!.Value, 0, out _presentQueue);
+        _context.Vk.GetDeviceQueue(LogicalDevice, _queueFamilyIndicies.GraphicsFamily!.Value, 0, out _graphicsQueue);
+        _context.Vk.GetDeviceQueue(LogicalDevice, _queueFamilyIndicies.PresentFamily!.Value, 0, out _presentQueue);
     }
 
     private PhysicalDevice FindPhysicalDevice()
     {
-        var devices = _context.vk.GetPhysicalDevices(_context.Instance);
+        var devices = _context.Vk.GetPhysicalDevices(_context.Instance);
 
         foreach (var device in devices)
         {
@@ -90,11 +90,11 @@ public unsafe class VulkanDevice
         var indicies = new QueueFamilyIndicies();
         var queueFamilyCount = 0u;
 
-        _context.vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, null);
+        _context.Vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, null);
 
         var families = new QueueFamilyProperties[queueFamilyCount];
         fixed (QueueFamilyProperties* familiesPointer = families)
-            _context.vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, familiesPointer);
+            _context.Vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, familiesPointer);
 
         for (var i = 0u; i < families.Length; i++)
         {
@@ -118,11 +118,11 @@ public unsafe class VulkanDevice
     private bool DeviceSupportsExtensions(PhysicalDevice physDevice)
     {
         var extensionCount = 0u;
-        _context.vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, null);
+        _context.Vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, null);
 
         var availableExtensions = new ExtensionProperties[extensionCount];
         fixed(ExtensionProperties* ptr = availableExtensions)
-            _context.vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, ptr);
+            _context.Vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, ptr);
         
         var availableExtensionNames = availableExtensions.Select(extension => Marshal.PtrToStringAnsi((nint)extension.ExtensionName));
         return DeviceExtensions.All(availableExtensionNames.Contains);
@@ -192,7 +192,7 @@ public unsafe class VulkanDevice
         if (_context.WantValidationLayers)
             VulkanDebug.AddValidationLayers(ref deviceCreateInfo);
 
-        if (_context.vk.CreateDevice(PhysicalDevice, in deviceCreateInfo, null, out var device) != Result.Success)
+        if (_context.Vk.CreateDevice(PhysicalDevice, in deviceCreateInfo, null, out var device) != Result.Success)
             throw new Exception("Logical device creation failed!");
 
         if (_context.WantValidationLayers)
@@ -203,7 +203,7 @@ public unsafe class VulkanDevice
 
     public void Destroy()
     {
-        _context.vk.DestroyDevice(LogicalDevice, null);
+        _context.Vk.DestroyDevice(LogicalDevice, null);
     }
 
     // synthetic fields

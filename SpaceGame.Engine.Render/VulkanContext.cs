@@ -5,7 +5,7 @@ namespace SpaceGame.Engine.Render;
 
 public unsafe class VulkanContext
 {
-    public required Vk vk { get; set; }
+    public required Vk Vk { get; set; }
     public required Instance Instance { get; set; }
     public VulkanDebug? Debug { get; set; }
     public VulkanDevice? Device { get; set; }
@@ -24,7 +24,7 @@ public unsafe class VulkanContext
             ExtSurface?.DestroySurface(Instance, Surface.Value, null);
         
         Debug?.Destroy();
-        vk.DestroyInstance(Instance, null);
-        vk.Dispose();
+        Vk.DestroyInstance(Instance, null);
+        Vk.Dispose();
     }
 }

@@ -41,7 +41,7 @@ public unsafe class VulkanDebug(VulkanContext context)
 
     public void SetupDebugger()
     {
-        if (!_context.vk.TryGetInstanceExtension(_context.Instance, out _debugUtilsExt)) return;
+        if (!_context.Vk.TryGetInstanceExtension(_context.Instance, out _debugUtilsExt)) return;
 
         var debugCreateInfo = GetDebugCreateInfo();
 

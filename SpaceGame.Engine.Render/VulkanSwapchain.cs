@@ -24,7 +24,7 @@ public unsafe class VulkanSwapchain
         _window = window;
         _context = context;
         
-        if (!context.vk.TryGetDeviceExtension(context.Instance, context.Device.LogicalDevice, out _khrSwapchainExt))
+        if (!context.Vk.TryGetDeviceExtension(context.Instance, context.Device.LogicalDevice, out _khrSwapchainExt))
             throw new Exception("KHR_Swapchain extension not found!");
         
         _self = CreateSwapchain();
@@ -170,7 +170,7 @@ public unsafe class VulkanSwapchain
                 }
             };
 
-            if (_context.vk.CreateImageView(_context.Device.LogicalDevice, in imageViewInfo, null, out result[i]) != Result.Success)
+            if (_context.Vk.CreateImageView(_context.Device.LogicalDevice, in imageViewInfo, null, out result[i]) != Result.Success)
                 throw new Exception("Image view creation failed!");
         }
 
@@ -183,7 +183,7 @@ public unsafe class VulkanSwapchain
             throw new Exception("Attempted to call Destroy() before device creation!");
 
         foreach (var imageView in _imageViews)
-            _context.vk.DestroyImageView(_context.Device.LogicalDevice, imageView, null);
+            _context.Vk.DestroyImageView(_context.Device.LogicalDevice, imageView, null);
 
         _khrSwapchainExt.DestroySwapchain(_context.Device.LogicalDevice, _self, null);
     }
