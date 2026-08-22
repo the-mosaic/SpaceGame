@@ -23,6 +23,7 @@ public unsafe class Renderer
     private Image[]? _swapchainImages;
     private Format? _swapchainImageFormat;
     private Extent2D _swapchainExtent;
+    private ImageView[] _swapchainImageViews;
     
     private IWindow _window;
     private readonly ILogger _log;
@@ -58,7 +59,7 @@ public unsafe class Renderer
 
         // Create our device. This little wrapper class will handle everything
         // for us just by using new().
-        _device = new(this);
+        _device = new VulkanDevice(this);
 
         // Logging for debug stuff
         if (WantValidationLayers)
@@ -69,6 +70,7 @@ public unsafe class Renderer
             throw new Exception("KHR_Swapchain extension not found!");
         
         _swapchain = CreateSwapchain();
+        _swapchainImageViews = CreateImageViews();
     }
 
     // INITIALIZATION FUNCTIONS
@@ -239,11 +241,50 @@ public unsafe class Renderer
         return swapchain;
     }
 
+    public ImageView[] CreateImageViews()
+    {
+        var result = new ImageView[_swapchainImages!.Length];
+
+        for (var i = 0; i < result.Length; i++)
+        {
+            var imageViewInfo = new ImageViewCreateInfo()
+            {
+                SType = StructureType.ImageViewCreateInfo,
+                Image = _swapchainImages[i],
+                ViewType = ImageViewType.Type2D,
+                Format = _swapchainImageFormat!.Value,
+                Components =
+                {
+                    R = ComponentSwizzle.Identity,
+                    G = ComponentSwizzle.Identity,
+                    B = ComponentSwizzle.Identity,
+                    A = ComponentSwizzle.Identity
+                },
+                SubresourceRange =
+                {
+                    AspectMask = ImageAspectFlags.ColorBit,
+                    BaseMipLevel = 0,
+                    LevelCount = 1,
+                    BaseArrayLayer = 0,
+                    LayerCount = 1
+                }
+            };
+
+            if (vk.CreateImageView(_device.LogicalDevice, in imageViewInfo, null, out result[i]) != Result.Success)
+                throw new Exception("Image view creation failed!");
+        }
+
+        return result;
+    }
+
     // RENDERING FUNCTIONS
 
     // CLEANUP FUNCTIONS
     public void Destroy()
     {
+        foreach (var imageView in _swapchainImageViews)
+            vk.DestroyImageView(_device.LogicalDevice, imageView, null);
+
         _khrSwapchainExt.DestroySwapchain(_device.LogicalDevice, _swapchain, null);
         _device.Destroy();
         Debug.Destroy();
