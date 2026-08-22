@@ -7,15 +7,15 @@ namespace SpaceGame.Engine.Render;
 
 public unsafe class RendererInit
 {
-    public static Instance CreateInstance(Renderer renderer)
+    public static Instance CreateInstance(ref bool wantValidationLayers, Vk vk)
     {
         var log = SpaceGame.Logger!.ForContext<RendererInit>();
 
-        if (renderer.WantValidationLayers && !renderer.Debug.ValidationLayersSupported())
+        if (wantValidationLayers && !VulkanDebug.ValidationLayersSupported(vk))
         {
             // Should we exit here or just do a warning?
             log.Warning("Validation layers requested, but the system does not support the required layers. Continuing without validation.");
-            renderer.WantValidationLayers = false;
+            wantValidationLayers = false;
         }
 
         // I really don't like having to use Marshal stuff here, but apparently
@@ -31,7 +31,7 @@ public unsafe class RendererInit
             ApiVersion = Vk.Version12
         };
 
-        var extensions = GetRequiredExtensions(renderer);
+        var extensions = GetRequiredExtensions(wantValidationLayers);
         var instanceInfo = new InstanceCreateInfo()
         {
             SType = StructureType.InstanceCreateInfo,
@@ -43,10 +43,10 @@ public unsafe class RendererInit
         };
 
         DebugUtilsMessengerCreateInfoEXT debugCreateInfo = default;
-        if (renderer.WantValidationLayers)
-            renderer.Debug.AddValidationLayers(ref instanceInfo, &debugCreateInfo);
+        if (wantValidationLayers)
+            VulkanDebug.AddValidationLayers(ref instanceInfo, &debugCreateInfo);
 
-        if (renderer.vk.CreateInstance(in instanceInfo, null, out var result) != Result.Success)
+        if (vk.CreateInstance(in instanceInfo, null, out var result) != Result.Success)
             throw new Exception("Vulkan creation failed");
 
         // grumble grumble
@@ -54,18 +54,18 @@ public unsafe class RendererInit
         Marshal.FreeHGlobal((nint)appInfo.PEngineName);
         SilkMarshal.Free((nint)instanceInfo.PpEnabledExtensionNames);
 
-        if (renderer.WantValidationLayers)
+        if (wantValidationLayers)
             SilkMarshal.Free((nint)instanceInfo.PpEnabledLayerNames);
         
         return result;
     }
 
-    private static string[] GetRequiredExtensions(Renderer renderer)
+    private static string[] GetRequiredExtensions(bool wantValidationLayers)
     {
         var glfwExntensions = SpaceGame.Instance!.SpWindow.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
         var extensions = SilkMarshal.PtrToStringArray((IntPtr)glfwExntensions, (int)glfwExtensionCount);
 
-        if (renderer.WantValidationLayers)
+        if (wantValidationLayers)
             extensions = [..extensions, ExtDebugUtils.ExtensionName];
 
         return extensions;

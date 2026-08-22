@@ -33,7 +33,7 @@ public unsafe class VulkanDevice
     public SwapchainSupportDetails SwapchainSupport { get; private set; }
     private PhysicalDeviceProperties _physicalDeviceProperties;
     private QueueFamilyIndicies _queueFamilyIndicies;
-    private readonly Renderer _renderer;
+    private readonly VulkanContext _context;
 
     // queues
     private Queue _graphicsQueue;
@@ -42,26 +42,26 @@ public unsafe class VulkanDevice
     public Queue GraphicsQueue { get => _graphicsQueue; }
     public Queue PresentQueue { get => _presentQueue; }
 
-    public VulkanDevice(Renderer renderer)
+    public VulkanDevice(VulkanContext context)
     {
-        _renderer = renderer;
+        _context = context;
 
         // Find a physical device. If none that support the features we need is
         // found, this function throws an exception.
         PhysicalDevice = FindPhysicalDevice();
         SwapchainSupport = GetSwapchainSupport(PhysicalDevice);
         _queueFamilyIndicies = GetQueueFamilyIndicies(PhysicalDevice);
-        _renderer.vk.GetPhysicalDeviceProperties(PhysicalDevice, out _physicalDeviceProperties);
+        _context.vk.GetPhysicalDeviceProperties(PhysicalDevice, out _physicalDeviceProperties);
 
         // Now make our logical device.
         LogicalDevice = CreateLogicalDevice();
-        _renderer.vk.GetDeviceQueue(LogicalDevice, _queueFamilyIndicies.GraphicsFamily!.Value, 0, out _graphicsQueue);
-        _renderer.vk.GetDeviceQueue(LogicalDevice, _queueFamilyIndicies.PresentFamily!.Value, 0, out _presentQueue);
+        _context.vk.GetDeviceQueue(LogicalDevice, _queueFamilyIndicies.GraphicsFamily!.Value, 0, out _graphicsQueue);
+        _context.vk.GetDeviceQueue(LogicalDevice, _queueFamilyIndicies.PresentFamily!.Value, 0, out _presentQueue);
     }
 
     private PhysicalDevice FindPhysicalDevice()
     {
-        var devices = _renderer.vk.GetPhysicalDevices(_renderer.Instance);
+        var devices = _context.vk.GetPhysicalDevices(_context.Instance);
 
         foreach (var device in devices)
         {
@@ -72,7 +72,7 @@ public unsafe class VulkanDevice
             if (extensionsSupported)
             {
                 var swapchainDetails = GetSwapchainSupport(device);
-                swapchainsSupported = swapchainDetails.Formats.Any() && swapchainDetails.PresentModes.Any();
+                swapchainsSupported = swapchainDetails.Formats.Length != 0 && swapchainDetails.PresentModes.Length != 0;
             }
 
             if (familyIndicies.IsComplete() && extensionsSupported && swapchainsSupported)
@@ -84,14 +84,17 @@ public unsafe class VulkanDevice
 
     private QueueFamilyIndicies GetQueueFamilyIndicies(PhysicalDevice physDevice)
     {
+        if (!_context.Surface.HasValue || _context.ExtSurface is null)
+            throw new Exception("Attempted to call GetQueueFamilyIndicies() before surface creation!");
+
         var indicies = new QueueFamilyIndicies();
         var queueFamilyCount = 0u;
 
-        _renderer.vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, null);
+        _context.vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, null);
 
         var families = new QueueFamilyProperties[queueFamilyCount];
         fixed (QueueFamilyProperties* familiesPointer = families)
-            _renderer.vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, familiesPointer);
+            _context.vk.GetPhysicalDeviceQueueFamilyProperties(physDevice, ref queueFamilyCount, familiesPointer);
 
         for (var i = 0u; i < families.Length; i++)
         {
@@ -100,7 +103,7 @@ public unsafe class VulkanDevice
             if (family.QueueFlags.HasFlag(QueueFlags.GraphicsBit))
                 indicies.GraphicsFamily = i;
             
-            _renderer.KhrSurfaceExt.GetPhysicalDeviceSurfaceSupport(physDevice, i, _renderer.Surface, out var presentSupport);
+            _context.ExtSurface.GetPhysicalDeviceSurfaceSupport(physDevice, i, _context.Surface.Value, out var presentSupport);
             if (presentSupport)
                 indicies.PresentFamily = i;
 
@@ -115,11 +118,11 @@ public unsafe class VulkanDevice
     private bool DeviceSupportsExtensions(PhysicalDevice physDevice)
     {
         var extensionCount = 0u;
-        _renderer.vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, null);
+        _context.vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, null);
 
         var availableExtensions = new ExtensionProperties[extensionCount];
         fixed(ExtensionProperties* ptr = availableExtensions)
-            _renderer.vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, ptr);
+            _context.vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, ptr);
         
         var availableExtensionNames = availableExtensions.Select(extension => Marshal.PtrToStringAnsi((nint)extension.ExtensionName));
         return DeviceExtensions.All(availableExtensionNames.Contains);
@@ -127,26 +130,29 @@ public unsafe class VulkanDevice
 
     private SwapchainSupportDetails GetSwapchainSupport(PhysicalDevice physDevice)
     {
-        var SurfaceExt = _renderer.KhrSurfaceExt;
+        if (!_context.Surface.HasValue || _context.ExtSurface is null)
+            throw new Exception("Attempted to call GetSwapchainSupport() before surface creation!");
+        
+        var ExtSurface = _context.ExtSurface;
 
         // Query our capabilities...
-        SurfaceExt.GetPhysicalDeviceSurfaceCapabilities(physDevice, _renderer.Surface, out var capabilities);
+        ExtSurface.GetPhysicalDeviceSurfaceCapabilities(physDevice, _context.Surface.Value, out var capabilities);
         
         // ...the formats that the device supports...
         var formatCount = 0u;
-        SurfaceExt.GetPhysicalDeviceSurfaceFormats(physDevice, _renderer.Surface, ref formatCount, null);
+        ExtSurface.GetPhysicalDeviceSurfaceFormats(physDevice, _context.Surface.Value, ref formatCount, null);
 
         var formats = new SurfaceFormatKHR[formatCount];
         fixed (SurfaceFormatKHR* ptr = formats)
-            SurfaceExt.GetPhysicalDeviceSurfaceFormats(physDevice, _renderer.Surface, ref formatCount, ptr);
+            ExtSurface.GetPhysicalDeviceSurfaceFormats(physDevice, _context.Surface.Value, ref formatCount, ptr);
 
         // ...and the present modes.
         var presentModeCount = 0u;
-        SurfaceExt.GetPhysicalDeviceSurfacePresentModes(physDevice, _renderer.Surface, ref presentModeCount, null);
+        ExtSurface.GetPhysicalDeviceSurfacePresentModes(physDevice, _context.Surface.Value, ref presentModeCount, null);
         
         var presentModes = new PresentModeKHR[presentModeCount];
         fixed (PresentModeKHR* ptr = presentModes)
-            SurfaceExt.GetPhysicalDeviceSurfacePresentModes(physDevice, _renderer.Surface, ref presentModeCount, ptr);
+            ExtSurface.GetPhysicalDeviceSurfacePresentModes(physDevice, _context.Surface.Value, ref presentModeCount, ptr);
 
         return new SwapchainSupportDetails()
         {
@@ -183,13 +189,13 @@ public unsafe class VulkanDevice
             EnabledLayerCount = 0
         };
 
-        if (_renderer.WantValidationLayers)
-            _renderer.Debug.AddValidationLayers(ref deviceCreateInfo);
+        if (_context.WantValidationLayers)
+            VulkanDebug.AddValidationLayers(ref deviceCreateInfo);
 
-        if (_renderer.vk.CreateDevice(PhysicalDevice, in deviceCreateInfo, null, out var device) != Result.Success)
+        if (_context.vk.CreateDevice(PhysicalDevice, in deviceCreateInfo, null, out var device) != Result.Success)
             throw new Exception("Logical device creation failed!");
 
-        if (_renderer.WantValidationLayers)
+        if (_context.WantValidationLayers)
             SilkMarshal.Free((nint)deviceCreateInfo.PpEnabledLayerNames);
         
         return device;
@@ -197,7 +203,7 @@ public unsafe class VulkanDevice
 
     public void Destroy()
     {
-        _renderer.vk.DestroyDevice(LogicalDevice, null);
+        _context.vk.DestroyDevice(LogicalDevice, null);
     }
 
     // synthetic fields

@@ -7,7 +7,7 @@ namespace SpaceGame.Engine.Render;
 
 public unsafe class VulkanSwapchain
 {
-    private readonly Renderer _renderer;
+    private readonly VulkanContext _context;
     private readonly IWindow _window;
     private readonly KhrSwapchain _khrSwapchainExt;
     private SwapchainKHR _self;
@@ -16,12 +16,15 @@ public unsafe class VulkanSwapchain
     private Extent2D _extent;
     private ImageView[] _imageViews;
 
-    public VulkanSwapchain(Renderer renderer, IWindow window)
+    public VulkanSwapchain(VulkanContext context, IWindow window)
     {
+        if (context.Device is null)
+            throw new Exception("Attempted to create swapchain before device creation!");
+
         _window = window;
-        _renderer = renderer;
+        _context = context;
         
-        if (!renderer.vk.TryGetDeviceExtension(renderer.Instance, renderer.Device.LogicalDevice, out _khrSwapchainExt))
+        if (!context.vk.TryGetDeviceExtension(context.Instance, context.Device.LogicalDevice, out _khrSwapchainExt))
             throw new Exception("KHR_Swapchain extension not found!");
         
         _self = CreateSwapchain();
@@ -68,7 +71,10 @@ public unsafe class VulkanSwapchain
 
     private SwapchainKHR CreateSwapchain()
     {
-        var supportDetails = _renderer.Device.GetSwapchainSupport();
+        if (_context.Device is null || !_context.Surface.HasValue)
+            throw new Exception("Attempted to call CreateSwapchain() before device creation!");
+
+        var supportDetails = _context.Device.GetSwapchainSupport();
 
         var surfaceFormat = ChooseSwapSurfaceFormat(supportDetails.Formats);
         var presentMode = ChooseSwapPresentMode(supportDetails.PresentModes);
@@ -82,7 +88,7 @@ public unsafe class VulkanSwapchain
         var swapchainCreateInfo = new SwapchainCreateInfoKHR()
         {
             SType = StructureType.SwapchainCreateInfoKhr,
-            Surface = _renderer.Surface,
+            Surface = _context.Surface.Value,
 
             MinImageCount = imageCount,
             ImageFormat = surfaceFormat.Format,
@@ -101,7 +107,7 @@ public unsafe class VulkanSwapchain
             OldSwapchain = default
         };
 
-        var familyIndicies = _renderer.Device.GetQueueFamilyIndicies();
+        var familyIndicies = _context.Device.GetQueueFamilyIndicies();
         
         if (familyIndicies.GraphicsFamily != familyIndicies.PresentFamily)
         {
@@ -115,16 +121,16 @@ public unsafe class VulkanSwapchain
             swapchainCreateInfo.PQueueFamilyIndices = familyIndiciesPtr;
         }
 
-        if (_khrSwapchainExt.CreateSwapchain(_renderer.Device.LogicalDevice, in swapchainCreateInfo, null, out var swapchain) != Result.Success)
+        if (_khrSwapchainExt.CreateSwapchain(_context.Device.LogicalDevice, in swapchainCreateInfo, null, out var swapchain) != Result.Success)
         {
             throw new Exception("Swapchain creation failed");
         }
         
-        _khrSwapchainExt.GetSwapchainImages(_renderer.Device.LogicalDevice, swapchain, ref imageCount, null);
+        _khrSwapchainExt.GetSwapchainImages(_context.Device.LogicalDevice, swapchain, ref imageCount, null);
         _images = new Image[imageCount];
 
         fixed (Image* ptr = _images)
-            _khrSwapchainExt.GetSwapchainImages(_renderer.Device.LogicalDevice, swapchain, ref imageCount, ptr);
+            _khrSwapchainExt.GetSwapchainImages(_context.Device.LogicalDevice, swapchain, ref imageCount, ptr);
 
         _imageFormat = surfaceFormat.Format;
         _extent = extent;
@@ -134,6 +140,9 @@ public unsafe class VulkanSwapchain
 
     public ImageView[] CreateImageViews()
     {
+        if (_context.Device is null)
+            throw new Exception("Attempted to call CreateImageViews() before device creation!");
+
         var result = new ImageView[_images!.Length];
 
         for (var i = 0; i < result.Length; i++)
@@ -161,7 +170,7 @@ public unsafe class VulkanSwapchain
                 }
             };
 
-            if (_renderer.vk.CreateImageView(_renderer.Device.LogicalDevice, in imageViewInfo, null, out result[i]) != Result.Success)
+            if (_context.vk.CreateImageView(_context.Device.LogicalDevice, in imageViewInfo, null, out result[i]) != Result.Success)
                 throw new Exception("Image view creation failed!");
         }
 
@@ -170,9 +179,12 @@ public unsafe class VulkanSwapchain
 
     public void Destroy()
     {
-        foreach (var imageView in _imageViews)
-            _renderer.vk.DestroyImageView(_renderer.Device.LogicalDevice, imageView, null);
+        if (_context.Device is null)
+            throw new Exception("Attempted to call Destroy() before device creation!");
 
-        _khrSwapchainExt.DestroySwapchain(_renderer.Device.LogicalDevice, _self, null);
+        foreach (var imageView in _imageViews)
+            _context.vk.DestroyImageView(_context.Device.LogicalDevice, imageView, null);
+
+        _khrSwapchainExt.DestroySwapchain(_context.Device.LogicalDevice, _self, null);
     }
 }
