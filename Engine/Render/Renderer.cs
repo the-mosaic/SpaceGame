@@ -18,12 +18,19 @@ public unsafe class Renderer
     private KhrSurface _khrSurfaceExt;
     public KhrSurface KhrSurfaceExt { get => _khrSurfaceExt; }
     public SurfaceKHR Surface { get; private set; }
-
+    private KhrSwapchain _khrSwapchainExt;
+    private SwapchainKHR _swapchain;
+    private Image[]? _swapchainImages;
+    private Format? _swapchainImageFormat;
+    private Extent2D _swapchainExtent;
+    
+    private IWindow _window;
     private readonly ILogger _log;
     public bool WantValidationLayers { get; private set; }
 
     public Renderer(bool wantValidationLayers, IWindow window)
     {
+        _window = window;
         WantValidationLayers = wantValidationLayers;
 
         _log = SpaceGame.Logger!.ForContext<Renderer>();
@@ -56,6 +63,12 @@ public unsafe class Renderer
         // Logging for debug stuff
         if (WantValidationLayers)
             _log.Information("Selected physical device {Name}, API Version {ApiVersion}", _device.DeviceName, _device.ApiVersionStr);
+        
+        // Now create the swapchain
+        if (!vk.TryGetDeviceExtension(Instance, _device.LogicalDevice, out _khrSwapchainExt))
+            throw new Exception("KHR_Swapchain extension not found!");
+        
+        _swapchain = CreateSwapchain();
     }
 
     // INITIALIZATION FUNCTIONS
@@ -122,11 +135,116 @@ public unsafe class Renderer
         return extensions;
     }
 
+    private SurfaceFormatKHR ChooseSwapSurfaceFormat(SurfaceFormatKHR[] availableFormats)
+    {
+        foreach (var surfaceFormat in availableFormats)
+        {
+            if (surfaceFormat.Format == Format.B8G8R8A8Srgb && surfaceFormat.ColorSpace == ColorSpaceKHR.SpaceSrgbNonlinearKhr)
+                return surfaceFormat;
+        }
+
+        return availableFormats[0];
+    }
+
+    private PresentModeKHR ChooseSwapPresentMode(PresentModeKHR[] availablePresentModes)
+    {
+        foreach (var presentMode in availablePresentModes)
+        {
+            if (presentMode == PresentModeKHR.MailboxKhr)
+                return presentMode;
+        }
+
+        return PresentModeKHR.FifoKhr;
+    }
+
+    private Extent2D ChooseSwapExtent(SurfaceCapabilitiesKHR capabilities)
+    {
+        if (capabilities.CurrentExtent.Width != uint.MaxValue)
+            return capabilities.CurrentExtent;
+        
+        var width = _window.GetFullSize().X;
+        var height = _window.GetFullSize().Y;
+
+        var actualExtent = new Extent2D((uint)width, (uint)height);
+
+        actualExtent.Width = Math.Clamp(actualExtent.Width, capabilities.MinImageExtent.Width, capabilities.MaxImageExtent.Width);
+        actualExtent.Height = Math.Clamp(actualExtent.Height, capabilities.MinImageExtent.Height, capabilities.MaxImageExtent.Height);
+
+        return actualExtent;
+    }
+
+    private SwapchainKHR CreateSwapchain()
+    {
+        var supportDetails = _device.GetSwapchainSupport();
+
+        var surfaceFormat = ChooseSwapSurfaceFormat(supportDetails.Formats);
+        var presentMode = ChooseSwapPresentMode(supportDetails.PresentModes);
+        var extent = ChooseSwapExtent(supportDetails.Capabilities);
+
+        var imageCount = supportDetails.Capabilities.MinImageCount + 1;
+
+        if (supportDetails.Capabilities.MaxImageCount > 0 && imageCount > supportDetails.Capabilities.MaxImageCount)
+            imageCount = supportDetails.Capabilities.MaxImageCount;
+        
+        var swapchainCreateInfo = new SwapchainCreateInfoKHR()
+        {
+            SType = StructureType.SwapchainCreateInfoKhr,
+            Surface = Surface,
+
+            MinImageCount = imageCount,
+            ImageFormat = surfaceFormat.Format,
+            ImageColorSpace = surfaceFormat.ColorSpace,
+            ImageExtent = extent,
+            ImageArrayLayers = 1,
+            ImageUsage = ImageUsageFlags.ColorAttachmentBit,
+
+            ImageSharingMode = SharingMode.Exclusive,
+            QueueFamilyIndexCount = 0,
+
+            PreTransform = supportDetails.Capabilities.CurrentTransform,
+            CompositeAlpha = CompositeAlphaFlagsKHR.OpaqueBitKhr,
+            PresentMode = presentMode,
+            Clipped = true,
+            OldSwapchain = default
+        };
+
+        var familyIndicies = _device.GetQueueFamilyIndicies();
+        
+        if (familyIndicies.GraphicsFamily != familyIndicies.PresentFamily)
+        {
+            var familyIndiciesPtr = stackalloc[] {
+                familyIndicies.GraphicsFamily!.Value,
+                familyIndicies.PresentFamily!.Value
+            };
+
+            swapchainCreateInfo.ImageSharingMode = SharingMode.Concurrent;
+            swapchainCreateInfo.QueueFamilyIndexCount = 2;
+            swapchainCreateInfo.PQueueFamilyIndices = familyIndiciesPtr;
+        }
+
+        if (_khrSwapchainExt.CreateSwapchain(_device.LogicalDevice, in swapchainCreateInfo, null, out var swapchain) != Result.Success)
+        {
+            throw new Exception("Swapchain creation failed");
+        }
+        
+        _khrSwapchainExt.GetSwapchainImages(_device.LogicalDevice, swapchain, ref imageCount, null);
+        _swapchainImages = new Image[imageCount];
+
+        fixed (Image* ptr = _swapchainImages)
+            _khrSwapchainExt.GetSwapchainImages(_device.LogicalDevice, swapchain, ref imageCount, ptr);
+
+        _swapchainImageFormat = surfaceFormat.Format;
+        _swapchainExtent = extent;
+
+        return swapchain;
+    }
+
     // RENDERING FUNCTIONS
 
     // CLEANUP FUNCTIONS
     public void Destroy()
     {
+        _khrSwapchainExt.DestroySwapchain(_device.LogicalDevice, _swapchain, null);
         _device.Destroy();
         Debug.Destroy();
 

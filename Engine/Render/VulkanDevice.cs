@@ -5,7 +5,7 @@ using Silk.NET.Vulkan.Extensions.KHR;
 
 namespace SpaceGame.Engine.Render;
 
-struct QueueFamilyIndicies
+public struct QueueFamilyIndicies
 {
     public uint? GraphicsFamily { get; set; }
     public uint? PresentFamily { get; set; }
@@ -16,7 +16,7 @@ struct QueueFamilyIndicies
     }
 }
 
-struct SwapchainSupportDetails
+public struct SwapchainSupportDetails
 {
     public SurfaceCapabilitiesKHR Capabilities { get; set; }
     public SurfaceFormatKHR[] Formats { get; set; }
@@ -30,6 +30,7 @@ public unsafe class VulkanDevice
 
     public PhysicalDevice PhysicalDevice { get; private set; }
     public Device LogicalDevice { get; private set; }
+    public SwapchainSupportDetails SwapchainSupport { get; private set; }
     private PhysicalDeviceProperties _physicalDeviceProperties;
     private QueueFamilyIndicies _queueFamilyIndicies;
     private readonly Renderer _renderer;
@@ -48,6 +49,7 @@ public unsafe class VulkanDevice
         // Find a physical device. If none that support the features we need is
         // found, this function throws an exception.
         PhysicalDevice = FindPhysicalDevice();
+        SwapchainSupport = GetSwapchainSupport(PhysicalDevice);
         _queueFamilyIndicies = GetQueueFamilyIndicies(PhysicalDevice);
         _renderer.vk.GetPhysicalDeviceProperties(PhysicalDevice, out _physicalDeviceProperties);
 
@@ -108,6 +110,8 @@ public unsafe class VulkanDevice
         return indicies;
     }
 
+    public QueueFamilyIndicies GetQueueFamilyIndicies() => GetQueueFamilyIndicies(PhysicalDevice);
+
     private bool DeviceSupportsExtensions(PhysicalDevice physDevice)
     {
         var extensionCount = 0u;
@@ -151,6 +155,8 @@ public unsafe class VulkanDevice
             PresentModes = presentModes
         };
     }
+
+    public SwapchainSupportDetails GetSwapchainSupport() => GetSwapchainSupport(PhysicalDevice);
 
     private Device CreateLogicalDevice()
     {
