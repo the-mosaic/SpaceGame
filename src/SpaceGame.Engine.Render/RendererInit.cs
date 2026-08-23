@@ -21,15 +21,21 @@ public unsafe class RendererInit
         // I really don't like having to use Marshal stuff here, but apparently
         // Silk.NET only supports using Spans for their OpenGL APIs(!!), so I'm
         // stuck with this ugly code for now.
-        var appInfo = new ApplicationInfo()
+        ApplicationInfo appInfo;
+
+        fixed(char* engineName = "No Engine")
+        fixed(char* applicationName = "Space game")
         {
-            SType = StructureType.ApplicationInfo,
-            PApplicationName = (byte*)Marshal.StringToHGlobalAnsi("Space game"),
-            ApplicationVersion = SpaceGame.ApplicationVersion,
-            PEngineName = (byte*)Marshal.StringToHGlobalAnsi("No Engine"),
-            EngineVersion = SpaceGame.ApplicationVersion,
-            ApiVersion = Vk.Version12
-        };
+            appInfo = new ApplicationInfo()
+            {
+                SType = StructureType.ApplicationInfo,
+                PApplicationName = (byte*)applicationName,
+                ApplicationVersion = SpaceGame.ApplicationVersion,
+                PEngineName = (byte*)engineName,
+                EngineVersion = SpaceGame.ApplicationVersion,
+                ApiVersion = Vk.Version12
+            };
+        }
 
         var extensions = GetRequiredExtensions(wantValidationLayers);
         var instanceInfo = new InstanceCreateInfo()
@@ -50,8 +56,6 @@ public unsafe class RendererInit
             throw new Exception("Vulkan creation failed");
 
         // grumble grumble
-        Marshal.FreeHGlobal((nint)appInfo.PApplicationName);
-        Marshal.FreeHGlobal((nint)appInfo.PEngineName);
         SilkMarshal.Free((nint)instanceInfo.PpEnabledExtensionNames);
 
         if (wantValidationLayers)

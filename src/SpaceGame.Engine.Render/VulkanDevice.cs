@@ -200,6 +200,19 @@ public unsafe class VulkanDevice
         
         return device;
     }
+    
+    public ShaderModule CreateShaderModule(ShaderModuleCreateInfo createInfo)
+    {
+        if (_context.Vk.CreateShaderModule(LogicalDevice, in createInfo, null, out var result) != Result.Success)
+            throw new Exception("Shader module creation failed!");
+        
+        return result;
+    }
+
+    public void DestroyShaderModule(ShaderModule module)
+    {
+        _context.Vk.DestroyShaderModule(LogicalDevice, module, null);
+    }
 
     public void Destroy()
     {

@@ -12,7 +12,7 @@ using MessageType = DebugUtilsMessageTypeFlagsEXT;
 using MessengerCallbackData = DebugUtilsMessengerCallbackDataEXT;
 using MessengerCallbackFn = DebugUtilsMessengerCallbackFunctionEXT;
 
-public unsafe class VulkanDebug(VulkanContext context)
+public unsafe class VulkanDebug
 {
     public static readonly string[] ValidationLayers = ["VK_LAYER_KHRONOS_validation"];
 
@@ -20,7 +20,14 @@ public unsafe class VulkanDebug(VulkanContext context)
     private DebugUtilsMessengerEXT _debugMessenger;
 
     private static readonly ILogger _log = SpaceGame.Logger!.ForContext<VulkanDebug>();
-    private readonly VulkanContext _context = context;
+    private readonly VulkanContext _context;
+    
+    public VulkanDebug(VulkanContext context)
+    {
+        _context = context;
+        if (context.WantValidationLayers)
+            SetupDebugger();
+    }
 
     public static bool ValidationLayersSupported(Vk vk)
     {
