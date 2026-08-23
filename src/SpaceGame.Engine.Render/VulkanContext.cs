@@ -20,8 +20,8 @@ public unsafe class VulkanContext
         Swapchain?.Destroy();
         Device?.Destroy();
 
-        if (Surface is not null)
-            ExtSurface?.DestroySurface(Instance, Surface.Value, null);
+        if (Surface is SurfaceKHR surface)
+            ExtSurface?.DestroySurface(Instance, surface, null);
         
         Debug?.Destroy();
         Vk.DestroyInstance(Instance, null);

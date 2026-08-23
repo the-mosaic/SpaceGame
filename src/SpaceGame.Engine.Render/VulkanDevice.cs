@@ -124,7 +124,7 @@ public unsafe class VulkanDevice
         fixed(ExtensionProperties* ptr = availableExtensions)
             _context.Vk.EnumerateDeviceExtensionProperties(physDevice, (byte*)null, ref extensionCount, ptr);
         
-        var availableExtensionNames = availableExtensions.Select(extension => Marshal.PtrToStringAnsi((nint)extension.ExtensionName));
+        var availableExtensionNames = availableExtensions.Select(extension => Marshal.PtrToStringAnsi((nint)extension.ExtensionName)).ToHashSet();
         return DeviceExtensions.All(availableExtensionNames.Contains);
     }
 

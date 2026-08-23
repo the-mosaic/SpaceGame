@@ -35,7 +35,7 @@ public unsafe class VulkanDebug(VulkanContext context)
         fixed (LayerProperties* layersPointer = availableLayers)
             vk.EnumerateInstanceLayerProperties(ref layerCount, layersPointer);
 
-        var availableLayerNames = availableLayers.Select(layer => Marshal.PtrToStringAnsi((IntPtr)layer.LayerName));
+        var availableLayerNames = availableLayers.Select(layer => Marshal.PtrToStringAnsi((IntPtr)layer.LayerName)).ToHashSet();
         return ValidationLayers.All(availableLayerNames.Contains);
     }
 
