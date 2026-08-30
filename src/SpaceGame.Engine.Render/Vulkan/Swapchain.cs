@@ -3,7 +3,7 @@ using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 
-namespace SpaceGame.Engine.Render;
+namespace SpaceGame.Engine.Render.Vulkan;
 
 public unsafe class VulkanSwapchain
 {
@@ -13,8 +13,8 @@ public unsafe class VulkanSwapchain
     private SwapchainKHR _self;
     private Image[]? _images;
     private Format? _imageFormat;
-    private Extent2D _extent;
-    private ImageView[] _imageViews;
+    public Extent2D Extent { get; private set; }
+    private readonly ImageView[] _imageViews;
 
     public VulkanSwapchain(VulkanContext context, IWindow window)
     {
@@ -133,7 +133,7 @@ public unsafe class VulkanSwapchain
             _khrSwapchainExt.GetSwapchainImages(_context.Device.LogicalDevice, swapchain, ref imageCount, ptr);
 
         _imageFormat = surfaceFormat.Format;
-        _extent = extent;
+        Extent = extent;
 
         return swapchain;
     }

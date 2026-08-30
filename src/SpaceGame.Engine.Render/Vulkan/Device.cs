@@ -3,7 +3,7 @@ using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 
-namespace SpaceGame.Engine.Render;
+namespace SpaceGame.Engine.Render.Vulkan;
 
 public struct QueueFamilyIndicies
 {
@@ -219,6 +219,15 @@ public unsafe class VulkanDevice
         _context.Vk.DestroyDevice(LogicalDevice, null);
     }
 
+    public static string VersionToString(uint version)
+    {
+        uint major = version >> 22;
+        uint minor = (version >> 12) & 0x3FF;
+        uint patch = version & 0xFFF;
+
+        return $"{major}.{minor}.{patch}";
+    }
+
     // synthetic fields
     public string? DeviceName
     {
@@ -235,7 +244,7 @@ public unsafe class VulkanDevice
     {
         get
         {
-            return RenderUtil.VersionToString(_physicalDeviceProperties.ApiVersion);
+            return VersionToString(_physicalDeviceProperties.ApiVersion);
         }
     }
 }

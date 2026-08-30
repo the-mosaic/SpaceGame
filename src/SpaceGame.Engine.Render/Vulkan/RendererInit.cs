@@ -3,13 +3,13 @@ using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 
-namespace SpaceGame.Engine.Render;
+namespace SpaceGame.Engine.Render.Vulkan;
 
-public unsafe class RendererInit
+public unsafe class VulkanInit
 {
     public static Instance CreateInstance(ref bool wantValidationLayers, Vk vk)
     {
-        var log = SpaceGame.Logger!.ForContext<RendererInit>();
+        var log = SpaceGame.Logger!.ForContext<VulkanInit>();
 
         if (wantValidationLayers && !VulkanDebug.ValidationLayersSupported(vk))
         {

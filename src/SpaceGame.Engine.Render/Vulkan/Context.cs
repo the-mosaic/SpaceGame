@@ -2,7 +2,7 @@ using Silk.NET.Shaderc;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 
-namespace SpaceGame.Engine.Render;
+namespace SpaceGame.Engine.Render.Vulkan;
 
 public unsafe class VulkanContext
 {
@@ -20,6 +20,7 @@ public unsafe class VulkanContext
 
     public void DestroyAll()
     {
+        Pipeline?.Destroy();
         Swapchain?.Destroy();
         Device?.Destroy();
 

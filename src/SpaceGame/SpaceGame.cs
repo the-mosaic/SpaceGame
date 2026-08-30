@@ -5,6 +5,7 @@ using Silk.NET.Maths;
 using Silk.NET.Windowing;
 using SpaceGame.Config;
 using SpaceGame.Engine.Render;
+using SpaceGame.Engine.Render.Vulkan;
 
 namespace SpaceGame;
 
@@ -20,7 +21,7 @@ public class SpaceGame
 
     // grahics-related variables
     public IWindow SpWindow { get; private set; }
-    public Renderer Renderer { get; private set; }
+    public IRenderer Renderer { get; private set; }
 
     private readonly ILogger _log;
 
@@ -39,7 +40,7 @@ public class SpaceGame
             _log.Information("Debug mode is ON");
 
         SpWindow = CreateWindow(Settings.WindowSize);
-        Renderer = new Renderer(Settings.DebugMode, SpWindow);
+        Renderer = new VulkanRenderer(Settings.DebugMode, SpWindow);
 
         Loop();
         Exit();

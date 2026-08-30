@@ -2,13 +2,13 @@ using System.Runtime.InteropServices;
 using Silk.NET.Shaderc;
 using Silk.NET.Vulkan;
 
-namespace SpaceGame.Engine.Render;
+namespace SpaceGame.Engine.Render.Vulkan;
 
 public unsafe class VulkanShader
 {
-    private VulkanContext _context;
+    private readonly VulkanContext _context;
+    private readonly ShaderKind _kind;
     private ShaderModule _self;
-    public ShaderModule Module => _self;
 
     public VulkanShader(VulkanContext context, string fileName, ShaderKind kind)
     {
@@ -16,6 +16,7 @@ public unsafe class VulkanShader
             throw new Exception("Attempted to create shader before device creation!");
 
         _context = context;
+        _kind = kind;
 
         byte[] code = CompileToSpirv(context, fileName, kind);
         ShaderModuleCreateInfo shaderInfo;
@@ -72,5 +73,31 @@ public unsafe class VulkanShader
             context.Shaderc.CompileOptionsRelease(compileOptions);
             context.Shaderc.CompilerRelease(compiler);
         }
+    }
+
+    public PipelineShaderStageCreateInfo GetPipelineStageCreateInfo()
+    {
+        var stage = ShaderStageFlags.VertexBit;
+
+        switch (_kind)
+        {
+            case ShaderKind.FragmentShader:
+                stage = ShaderStageFlags.FragmentBit;
+                break;
+        }
+
+        PipelineShaderStageCreateInfo info;
+        fixed (char* pName = "main")
+        {
+            info = new PipelineShaderStageCreateInfo
+            {
+                SType = StructureType.PipelineShaderStageCreateInfo,
+                Stage = stage,
+                Module = _self,
+                PName = (byte*)pName
+            };
+        }
+
+        return info;
     }
 }

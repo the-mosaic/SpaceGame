@@ -4,9 +4,9 @@ using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 
-namespace SpaceGame.Engine.Render;
+namespace SpaceGame.Engine.Render.Vulkan;
 
-public unsafe class Renderer
+public unsafe class VulkanRenderer: IRenderer
 {
     // vulkan related variables
     public VulkanContext Context { get; private set; }
@@ -14,16 +14,16 @@ public unsafe class Renderer
     private readonly ILogger _log;
 
     // INITIALIZATION FUNCTIONS
-    public Renderer(bool wantValidationLayers, IWindow window)
+    public VulkanRenderer(bool wantValidationLayers, IWindow window)
     {
-        _log = SpaceGame.Logger!.ForContext<Renderer>();
+        _log = SpaceGame.Logger!.ForContext<VulkanRenderer>();
         var vk = Vk.GetApi();
 
         Context = new VulkanContext
         {
             Vk = vk,
             Shaderc = Shaderc.GetApi(),
-            Instance = RendererInit.CreateInstance(ref wantValidationLayers, vk),
+            Instance = VulkanInit.CreateInstance(ref wantValidationLayers, vk),
             WantValidationLayers = wantValidationLayers
         };
         
@@ -44,6 +44,7 @@ public unsafe class Renderer
     }
 
     // RENDERING FUNCTIONS
+    public void Render() {}
 
     // CLEANUP FUNCTIONS
     public void Destroy() => Context.DestroyAll();

@@ -4,7 +4,7 @@ using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using System.Runtime.InteropServices;
 
-namespace SpaceGame.Engine.Render;
+namespace SpaceGame.Engine.Render.Vulkan;
 
 // aliases to make my life a bit easier
 using MessageSeverity = DebugUtilsMessageSeverityFlagsEXT;
